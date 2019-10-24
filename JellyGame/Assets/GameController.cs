@@ -9,80 +9,152 @@ using UnityEngine.UI;
 
 public class GameController : MonoBehaviour
 {
-    private Vector3 touchStart;
-    Vector3 direction;
-    public float cameraApertureLimit = 8;
-    [SerializeField] private GameObject jelly;
-    [SerializeField] private GameObject jellyCopy;
-    [SerializeField] private GameObject jellyWay;
-    //GameControl gameControlObj;
+    [HideInInspector] public Transform jelly;
+    [HideInInspector] public Transform jellyCopy;
+    [HideInInspector] public Transform jellyWay;
+    [HideInInspector] public GameStatus GameStatusEnum;
+    [HideInInspector] public int ObstacleCounter = 0;
 
-    private Vector3 beginPos;
+    private JellyController _jellyController;
+
     private Vector3 jellyScale;
     private Vector3 jellyCopyScale;
     private Vector3 jellyWayScale;
+    private Vector3 _beginPos;
+    private Vector3 _touchStart;
+    private Vector3 _direction;
+
+    private float _excessWidth;
+    private float _timeCounterForStarEnum = 0;
 
     void Start()
     {
+        GameStatusEnum = GameStatus.STAY;
+
+        jelly = GameObject.FindGameObjectWithTag("Player").transform;
+        _jellyController = jelly.GetComponent<JellyController>();
+        jellyWay = jelly.Find("JellyWay");
+        jellyCopy = jelly.Find("JellyCopy");
+        jellyCopy.transform.SetParent(transform.parent);
+        jellyWay.transform.SetParent(transform.parent);
+
         LeanTouch.OnFingerDown += OnFingerDown;
         LeanTouch.OnFingerSet += OnFingerSet;
-        LeanTouch.OnFingerExpired += OnFingerExpired;
+        
+        _excessWidth = (jellyCopy.transform.localScale.z + jelly.transform.localScale.z) / 2;      
     }
 
-    private void OnFingerExpired(LeanFinger obj)
+    private void FixedUpdate()
     {
+        JellyWayPropertyZ();
+        switch (GameStatusEnum)
+        {
+            case GameStatus.START:
+                break;
+            case GameStatus.STAY:
+                if (_jellyController.Hit.distance > 0.2f)
+                    jellyCopy.gameObject.SetActive(true);
+                else
+                    jellyCopy.gameObject.SetActive(false);
+                break;
+            case GameStatus.CRASH:
+                break;
+            case GameStatus.BREAKOBSTACLE:
+                break;
+            case GameStatus.STARINIT:
+                ChangeObstacleMat("green");
+                jellyCopy.gameObject.SetActive(false);
+                jellyWay.gameObject.SetActive(false);
+                GameStatusEnum = GameStatus.STARSTAY;
+                break;
+            case GameStatus.STARSTAY:
+                _timeCounterForStarEnum += Time.deltaTime;
+                if (_timeCounterForStarEnum > 3)
+                {
+                    GameStatusEnum = GameStatus.STAY;
+                    ChangeObstacleMat("gray");
+                    ObstacleCounter = 0;
+                }
+                break;
+            case GameStatus.EMPTY:
+                break;
+        }
 
     }
 
-    private void OnFingerSet(LeanFinger obj)
+    void ResizeWithTouch(GameObject myObj, int condition)
     {
-        if (beginPos.y > obj.ScreenPosition.y)
+        if (condition == 1)
         {
-            if (jelly.transform.localScale.y > 0.2f)
-            {
-                jellyScale = jelly.transform.localScale - new Vector3(-0.1f, 0.1f, 0);
-                jelly.transform.localScale = jellyScale;
-                jelly.transform.position -= new Vector3(0, 0.1f, 0) / 2;
-
-                jellyCopyScale = jellyCopy.transform.localScale - new Vector3(-0.1f, 0.1f, 0);
-                jellyCopy.transform.localScale = jellyCopyScale;
-                jellyCopy.transform.position -= new Vector3(0, 0.1f, 0) / 2;
-
-                jellyWayScale = jellyWay.transform.localScale - new Vector3(-0.1f, 0.1f, 0);
-                jellyWay.transform.localScale = jellyWayScale;
-                jellyWay.transform.position -= new Vector3(0, 0.1f, 0) / 2;
-            }
-
+            myObj.transform.localScale -= new Vector3(-0.1f, 0.1f, 0);
+            myObj.transform.position -= new Vector3(0, 0.1f, 0) / 2;
         }
-        else if (beginPos.y < obj.ScreenPosition.y)
+        else
         {
-            if (jelly.transform.localScale.y < 1.8f)
+            myObj.transform.localScale += new Vector3(-0.1f, 0.1f, 0);
+            myObj.transform.position += new Vector3(0, 0.1f, 0) / 2;
+        }
+    }
+    void JellyWayPropertyZ()
+    {
+        if (GameStatusEnum == GameStatus.STAY)
+        {
+            if (_jellyController.Hit.distance > 0.2f)
             {
-                jellyScale = jelly.transform.localScale + new Vector3(-0.1f, 0.1f, 0);
-                jelly.transform.localScale = jellyScale;
-                jelly.transform.position += new Vector3(0, 0.1f, 0) / 2;
-
-                jellyCopyScale = jellyCopy.transform.localScale + new Vector3(-0.1f, 0.1f, 0);
-                jellyCopy.transform.localScale = jellyCopyScale;
-                jellyCopy.transform.position += new Vector3(0, 0.1f, 0) / 2;
-
-                jellyWayScale = jellyWay.transform.localScale + new Vector3(-0.1f, 0.1f, 0);
-                jellyWay.transform.localScale = jellyWayScale;
-                jellyWay.transform.position += new Vector3(0, 0.1f, 0) / 2;
+                jellyWay.gameObject.SetActive(true);
+                jellyWay.transform.localScale = new Vector3(jellyWay.transform.localScale.x, jellyWay.transform.localScale.y, (_jellyController.Hit.distance - _excessWidth) + jellyCopy.transform.localScale.z);
+                jellyWay.transform.position = jelly.transform.position + jelly.transform.forward * (_jellyController.Hit.distance + (jelly.transform.localScale.z - jellyCopy.transform.localScale.z * 2)) / 2;
+            }
+            else
+            {
+                jellyWay.gameObject.SetActive(false);
             }
         }
-        beginPos = obj.ScreenPosition;
+
+    }
+    private void ChangeObstacleMat(string _color)
+    {
+        if (_color == "green")
+        {
+            for (int i = 0; i < GameObject.FindGameObjectsWithTag("ObstacleTag").Length; i++)
+            {
+                GameObject.FindGameObjectsWithTag("ObstacleTag")[i].GetComponent<MeshRenderer>().material.color = Color.green;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < GameObject.FindGameObjectsWithTag("ObstacleTag").Length; i++)
+            {
+                GameObject.FindGameObjectsWithTag("ObstacleTag")[i].GetComponent<MeshRenderer>().material.color = Color.gray;
+            }
+        }
+
+
     }
 
     private void OnFingerDown(LeanFinger obj)
     {
-        beginPos = obj.ScreenPosition;
+        _beginPos = obj.ScreenPosition;
     }
-
-    void Update()
+    private void OnFingerSet(LeanFinger obj)
     {
-
-
-
+        if (GameStatusEnum == GameStatus.STAY || GameStatusEnum == GameStatus.STARSTAY)
+        {
+            if (_beginPos.y > obj.ScreenPosition.y && jelly.transform.localScale.y > 0.2f)
+            {
+                ResizeWithTouch(jelly.gameObject, 1);
+                ResizeWithTouch(jellyCopy.gameObject, 1);
+                ResizeWithTouch(jellyWay.gameObject, 1);
+            }
+            else if (_beginPos.y < obj.ScreenPosition.y && jelly.transform.localScale.y < 1.8f)
+            {
+                ResizeWithTouch(jelly.gameObject, 2);
+                ResizeWithTouch(jellyCopy.gameObject, 2);
+                ResizeWithTouch(jellyWay.gameObject, 2);
+            }
+            _beginPos = obj.ScreenPosition;
+        }
     }
+
+
 }
